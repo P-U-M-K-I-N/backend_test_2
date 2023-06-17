@@ -387,45 +387,23 @@ class PersonnelDetailsAPIView(APIView):
         your_result = []
         order_asc = 1
 
-        school_id = Schools.objects.get(title=school_title).id
-        # class_data = Classes.objects.filter(school_id=school_id) #id,class_order,school_id
-        data_by_personnel = Personnel.objects.order_by('personnel_type')
-        
-        # for class_element in class_data:
-        #     student_data = Personnel.objects.order_by('personnel_type').filter(school_class_id=class_element.id)
-        #     for element_student in student_data:
-        #         role = role_type(element_student.personnel_type)
-        #         first_name = element_student.first_name
-        #         last_name = element_student.last_name
-        #         str_pattern = str(order_asc)+'. school: '+str(school_title)+', role: '+str(role)+', class: '+str(class_element.id)+', name: '+str(first_name)+' '+str(last_name)
-        #         your_result.append({str_pattern})
-        #         order_asc+=1
+        personnel_list = Personnel.objects.select_related("school_class").values('id', 'first_name', 'last_name','personnel_type', 'school_class__class_order', 'school_class__school__title')
+        personnel_school = personnel_list.filter(school_class__school__title = school_title)
+        personnel_order = personnel_school.order_by('personnel_type', 'school_class__class_order', 'first_name')
 
-        # for student_data in data_by_personnel:
-        #     print(student_data.personnel_type, student_data.Classes.class_order)
-        #     role = role_type(student_data.personnel_type)
-        #     first_name = student_data.first_name
-        #     last_name = student_data.last_name
-        #     class_data = Classes.objects.order_by('class_order')
-        #     # class_data = Classes.objects.get(id=student_data.school_class_id).class_order
+        try:
+            for personnel in personnel_order:
+                print(personnel)
+                role = role_type(personnel['personnel_type'])
+                class_data = personnel['school_class__class_order']
+                str_pattern = f"{order_asc}. school: {str(school_title).upper()}, role: {role}, class: {class_data}, name: {personnel['first_name'].upper()} {personnel['last_name'].upper()}."
+                your_result.append({str_pattern})
+                order_asc+=1
 
-        #     for class_element in class_data:
-
-
-        #     str_pattern = f"{order_asc}. school: {str(school_title).upper()}, role: {role}, class: {class_data}, name: {first_name.upper()} {last_name.upper()}."
-        #     your_result.append({str_pattern})
-        #     order_asc+=1
-            
-        # for type in range(3):
-        #     student_data = Personnel.objects.filter(personnel_type=type)
-        
-        personnel_queryset = Personnel.objects.select_related('Classes')
-        for personnel in personnel_queryset:
-            # Access fields from Personnel and related Classes objects
-            print(personnel.id, personnel.personnel_type, personnel.school_class.id, personnel.school_class.class_order)
-
-        return Response(your_result, status=status.HTTP_400_BAD_REQUEST)
-
+            return Response(your_result, status=status.HTTP_200_OK) 
+           
+        except:
+            return Response(your_result, status=status.HTTP_400_BAD_REQUEST)
 
 class SchoolHierarchyAPIView(APIView):
 
@@ -1009,10 +987,36 @@ class SchoolHierarchyAPIView(APIView):
 
         your_result = []
 
-        personnel_list = Personnel.objects.select_related('school_class__school').order_by('school_class__school__title', 'school_class__class_order', 'name')
-        for e in personnel_list:
-            print(e.id)
+        school_list = Schools.objects.all()
+        for school in school_list:
+            class_list = Classes.objects.filter(school_id = school.id)
 
+            for student_class in class_list:
+                personnel_list = Personnel.objects.filter(school_class_id = student_class.id)
+                techer = personnel_list.get(personnel_type = 0)
+                TECHER = {}
+                head = personnel_list.get(personnel_type = 1)
+                student_list = personnel_list.filter(personnel_type = 2)
+
+                STUDENT = [{
+                    "Head of the room": head.first_name + ' ' +head.last_name
+                }]
+
+                for student in student_list:
+                    STUDENT.append({
+                        "Student": ' '.join([student.first_name, student.last_name])
+                    })
+
+                techer_name = "Teacher: "+' '.join([techer.first_name, techer.last_name])
+                TECHER[techer_name] = STUDENT
+            
+                class_name = "class: "+ str(student_class.class_order)
+
+                your_result.append({
+                    "school": school.title,
+                    class_name : TECHER
+                    
+                })
 
         return Response(your_result, status=status.HTTP_200_OK)
 
